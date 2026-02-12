@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Navigate } from "react-router-dom";
 import { GraduationCap, Mail, Lock, User, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,9 +22,8 @@ const Login = () => {
   const [signupRole, setSignupRole] = useState<"student" | "organizer">("student");
 
   // If already logged in, redirect
-  if (auth.isAuthenticated) {
-    navigate(auth.user!.role === "student" ? "/student" : "/organizer", { replace: true });
-    return null;
+  if (auth.isAuthenticated && auth.user) {
+    return <Navigate to={auth.user.role === "student" ? "/student" : "/organizer"} replace />;
   }
 
   const handleLogin = () => {

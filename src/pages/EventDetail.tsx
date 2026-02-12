@@ -1,13 +1,15 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, Calendar, Clock, MapPin, Users, Share2, Tag, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
 import { useEvents } from "@/lib/event-context";
+import { toast } from "sonner";
 
 const EventDetail = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { getEvent, registerForEvent, unregisterFromEvent, getRegistrationStatus, getWaitlistPosition } = useEvents();
 
@@ -31,11 +33,15 @@ const EventDetail = () => {
   const fillPercent = (event.registeredUsers.length / event.maxAttendees) * 100;
 
   const handleAction = () => {
-    if (!user) return;
+    if (!user) {
+      toast.error("Please log in or sign up to register for events");
+      navigate("/login");
+      return;
+    }
     if (status === "registered" || status === "waitlisted") {
       unregisterFromEvent(event.id, userId);
     } else {
-      registerForEvent(event.id, userId, user.name);
+      registerForEvent(event.id, userId, user.name, user.email);
     }
   };
 
@@ -146,12 +152,12 @@ const EventDetail = () => {
 
                 <Button
                   className={`w-full h-11 font-semibold ${status === "registered"
-                      ? "border-success text-success"
-                      : status === "waitlisted"
-                        ? "border-warning text-warning"
-                        : status === "closed"
-                          ? ""
-                          : "gradient-accent text-accent-foreground border-0"
+                    ? "border-success text-success"
+                    : status === "waitlisted"
+                      ? "border-warning text-warning"
+                      : status === "closed"
+                        ? ""
+                        : "gradient-accent text-accent-foreground border-0"
                     }`}
                   variant={status === "available" ? "default" : "outline"}
                   onClick={handleAction}

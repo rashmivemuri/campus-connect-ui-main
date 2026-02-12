@@ -1,13 +1,21 @@
-import { createContext, useContext, useState, useEffect, useRef, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { toast } from "sonner";
 import { mockEvents as seedEvents, type Event as BaseEvent } from "@/lib/mock-data";
 
 // ─── Types ──────────────────────────────────────────────────────
 
+export interface Attendee {
+    userId: string;
+    userName: string;
+    userEmail: string;
+    registeredAt: string; // ISO timestamp
+}
+
 export interface EventData extends Omit<BaseEvent, "attendees" | "isRsvped"> {
-    registeredUsers: string[]; // user IDs
-    waitlist: string[];        // user IDs
+    registeredUsers: Attendee[];
+    waitlist: Attendee[];
     rsvpConfirmed: string[];   // user IDs who confirmed RSVP
+    checkedIn: string[];       // user IDs who checked in via QR
     createdBy: string;         // organizer user ID
 }
 
@@ -23,16 +31,17 @@ interface EventContextValue {
     events: EventData[];
     notifications: Notification[];
     getEvent: (id: string) => EventData | undefined;
-    createEvent: (event: Omit<EventData, "id" | "registeredUsers" | "waitlist" | "rsvpConfirmed">) => void;
-    updateEvent: (id: string, updates: Partial<Omit<EventData, "id" | "registeredUsers" | "waitlist" | "rsvpConfirmed" | "createdBy">>) => void;
+    createEvent: (event: Omit<EventData, "id" | "registeredUsers" | "waitlist" | "rsvpConfirmed" | "checkedIn">) => void;
+    updateEvent: (id: string, updates: Partial<Omit<EventData, "id" | "registeredUsers" | "waitlist" | "rsvpConfirmed" | "checkedIn" | "createdBy">>) => void;
     deleteEvent: (id: string) => void;
-    registerForEvent: (eventId: string, userId: string, userName: string) => void;
+    registerForEvent: (eventId: string, userId: string, userName: string, userEmail: string) => void;
     unregisterFromEvent: (eventId: string, userId: string) => void;
     getRegistrationStatus: (eventId: string, userId: string) => RegistrationStatus;
     getWaitlistPosition: (eventId: string, userId: string) => number;
     confirmRsvp: (eventId: string, userId: string) => void;
     cancelRsvp: (eventId: string, userId: string) => void;
     getRsvpStatus: (eventId: string, userId: string) => boolean;
+    checkInUser: (eventId: string, userId: string) => "success" | "already" | "not-registered" | "not-found";
     markNotificationRead: (id: string) => void;
     clearNotifications: () => void;
     unreadCount: number;
@@ -68,6 +77,7 @@ function seedToEventData(events: BaseEvent[]): EventData[] {
         registeredUsers: [],
         waitlist: [],
         rsvpConfirmed: [],
+        checkedIn: [],
         createdBy: "seed-organizer",
     }));
 }
@@ -79,6 +89,15 @@ function getStored<T>(key: string, fallback: T): T {
     } catch {
         return fallback;
     }
+}
+
+// Helper to check if user is in an Attendee array
+function hasUser(list: Attendee[], userId: string): boolean {
+    return list.some((a) => a.userId === userId);
+}
+
+function removeUser(list: Attendee[], userId: string): Attendee[] {
+    return list.filter((a) => a.userId !== userId);
 }
 
 // ─── Context ────────────────────────────────────────────────────
@@ -105,8 +124,8 @@ export function EventProvider({ children }: { children: ReactNode }) {
 
     // ── CRUD ────────────────────────────────────────────────────
 
-    const createEvent = (event: Omit<EventData, "id" | "registeredUsers" | "waitlist" | "rsvpConfirmed">) => {
-        const newEvent: EventData = { ...event, id: generateId(), registeredUsers: [], waitlist: [], rsvpConfirmed: [] };
+    const createEvent = (event: Omit<EventData, "id" | "registeredUsers" | "waitlist" | "rsvpConfirmed" | "checkedIn">) => {
+        const newEvent: EventData = { ...event, id: generateId(), registeredUsers: [], waitlist: [], rsvpConfirmed: [], checkedIn: [] };
         setEvents((prev) => [newEvent, ...prev]);
         toast.success(`Event "${newEvent.title}" created!`);
     };
@@ -124,21 +143,23 @@ export function EventProvider({ children }: { children: ReactNode }) {
 
     // ── Registration ────────────────────────────────────────────
 
-    const registerForEvent = (eventId: string, userId: string, userName: string) => {
+    const registerForEvent = (eventId: string, userId: string, userName: string, userEmail: string) => {
         setEvents((prev) =>
             prev.map((e) => {
                 if (e.id !== eventId) return e;
-                if (e.registeredUsers.includes(userId) || e.waitlist.includes(userId)) return e;
+                if (hasUser(e.registeredUsers, userId) || hasUser(e.waitlist, userId)) return e;
+
+                const attendee: Attendee = { userId, userName, userEmail, registeredAt: new Date().toISOString() };
 
                 if (e.registeredUsers.length < e.maxAttendees) {
                     toast.success(`Registered for "${e.title}" 🎉`);
                     addNotification(`You registered for "${e.title}" on ${new Date(e.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`, e.id);
-                    return { ...e, registeredUsers: [...e.registeredUsers, userId] };
+                    return { ...e, registeredUsers: [...e.registeredUsers, attendee] };
                 } else {
                     const pos = e.waitlist.length + 1;
                     toast.info(`"${e.title}" is full — you're #${pos} on the waitlist`);
                     addNotification(`You joined the waitlist (#${pos}) for "${e.title}"`, e.id);
-                    return { ...e, waitlist: [...e.waitlist, userId] };
+                    return { ...e, waitlist: [...e.waitlist, attendee] };
                 }
             })
         );
@@ -149,13 +170,13 @@ export function EventProvider({ children }: { children: ReactNode }) {
             prev.map((e) => {
                 if (e.id !== eventId) return e;
 
-                if (e.waitlist.includes(userId)) {
+                if (hasUser(e.waitlist, userId)) {
                     toast.info("Removed from waitlist");
-                    return { ...e, waitlist: e.waitlist.filter((id) => id !== userId) };
+                    return { ...e, waitlist: removeUser(e.waitlist, userId) };
                 }
 
-                if (e.registeredUsers.includes(userId)) {
-                    const newRegistered = e.registeredUsers.filter((id) => id !== userId);
+                if (hasUser(e.registeredUsers, userId)) {
+                    const newRegistered = removeUser(e.registeredUsers, userId);
                     const newWaitlist = [...e.waitlist];
                     if (newWaitlist.length > 0) {
                         const promoted = newWaitlist.shift()!;
@@ -173,8 +194,8 @@ export function EventProvider({ children }: { children: ReactNode }) {
     const getRegistrationStatus = (eventId: string, userId: string): RegistrationStatus => {
         const event = events.find((e) => e.id === eventId);
         if (!event) return "closed";
-        if (event.registeredUsers.includes(userId)) return "registered";
-        if (event.waitlist.includes(userId)) return "waitlisted";
+        if (hasUser(event.registeredUsers, userId)) return "registered";
+        if (hasUser(event.waitlist, userId)) return "waitlisted";
         if (event.registeredUsers.length >= event.maxAttendees) return "closed";
         return "available";
     };
@@ -182,7 +203,7 @@ export function EventProvider({ children }: { children: ReactNode }) {
     const getWaitlistPosition = (eventId: string, userId: string): number => {
         const event = events.find((e) => e.id === eventId);
         if (!event) return -1;
-        const idx = event.waitlist.indexOf(userId);
+        const idx = event.waitlist.findIndex((a) => a.userId === userId);
         return idx === -1 ? -1 : idx + 1;
     };
 
@@ -192,7 +213,7 @@ export function EventProvider({ children }: { children: ReactNode }) {
         setEvents((prev) =>
             prev.map((e) => {
                 if (e.id !== eventId) return e;
-                if (!e.registeredUsers.includes(userId)) return e;
+                if (!hasUser(e.registeredUsers, userId)) return e;
                 if (e.rsvpConfirmed?.includes(userId)) return e;
                 toast.success(`RSVP confirmed for "${e.title}" ✓`);
                 addNotification(`You confirmed your RSVP for "${e.title}"`, e.id);
@@ -217,6 +238,24 @@ export function EventProvider({ children }: { children: ReactNode }) {
         return (event.rsvpConfirmed || []).includes(userId);
     };
 
+    // ── Check-In (QR) ────────────────────────────────────────────
+
+    const checkInUser = (eventId: string, userId: string): "success" | "already" | "not-registered" | "not-found" => {
+        const event = events.find((e) => e.id === eventId);
+        if (!event) return "not-found";
+        if (!hasUser(event.registeredUsers, userId)) return "not-registered";
+        if ((event.checkedIn || []).includes(userId)) return "already";
+
+        setEvents((prev) =>
+            prev.map((e) => {
+                if (e.id !== eventId) return e;
+                return { ...e, checkedIn: [...(e.checkedIn || []), userId] };
+            })
+        );
+        toast.success("Checked in successfully! 🎉");
+        return "success";
+    };
+
     // ── Reminders ────────────────────────────────────────────────
 
     const checkReminders = (userId: string) => {
@@ -226,12 +265,11 @@ export function EventProvider({ children }: { children: ReactNode }) {
         const oneDayMs = 24 * 60 * 60 * 1000;
 
         events.forEach((e) => {
-            if (!e.registeredUsers.includes(userId)) return;
+            if (!hasUser(e.registeredUsers, userId)) return;
             const eventDate = new Date(e.date);
             const timeDiff = eventDate.getTime() - now.getTime();
             const reminderKey = `${userId}_${e.id}`;
 
-            // Send reminder if event is within 24 hours and reminder not yet sent
             if (timeDiff > 0 && timeDiff <= oneDayMs && !sentReminders.includes(reminderKey)) {
                 addNotification(
                     `⏰ Reminder: "${e.title}" is tomorrow at ${e.time}! Don't forget to attend.`,
@@ -260,6 +298,7 @@ export function EventProvider({ children }: { children: ReactNode }) {
                 registerForEvent, unregisterFromEvent,
                 getRegistrationStatus, getWaitlistPosition,
                 confirmRsvp, cancelRsvp, getRsvpStatus,
+                checkInUser,
                 markNotificationRead, clearNotifications, unreadCount,
                 checkReminders,
             }}

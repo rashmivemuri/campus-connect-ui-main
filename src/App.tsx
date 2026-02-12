@@ -11,6 +11,7 @@ import StudentDashboard from "./pages/StudentDashboard";
 import OrganizerDashboard from "./pages/OrganizerDashboard";
 import EventDetail from "./pages/EventDetail";
 import Settings from "./pages/Settings";
+import CheckIn from "./pages/CheckIn";
 import NotFound from "./pages/NotFound";
 import { ReactNode } from "react";
 
@@ -30,6 +31,7 @@ function AppRoutes() {
       <Route path="/student" element={<ProtectedRoute><StudentDashboard /></ProtectedRoute>} />
       <Route path="/organizer" element={<ProtectedRoute><OrganizerDashboard /></ProtectedRoute>} />
       <Route path="/event/:id" element={<ProtectedRoute><EventDetail /></ProtectedRoute>} />
+      <Route path="/event/:id/checkin" element={<ProtectedRoute><CheckIn /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>

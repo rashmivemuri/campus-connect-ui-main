@@ -62,7 +62,7 @@ const StudentDashboard = () => {
     // My Events tab: show only registered or waitlisted
     if (isMyEvents) {
       result = result.filter(
-        (e) => e.registeredUsers.includes(userId) || e.waitlist.includes(userId)
+        (e) => e.registeredUsers.some(a => a.userId === userId) || e.waitlist.some(a => a.userId === userId)
       );
     }
 
@@ -97,8 +97,8 @@ const StudentDashboard = () => {
     return result;
   }, [events, selectedCategory, selectedDept, dateFilter, searchQuery, isMyEvents, userId]);
 
-  const registeredCount = events.filter((e) => e.registeredUsers.includes(userId)).length;
-  const waitlistedCount = events.filter((e) => e.waitlist.includes(userId)).length;
+  const registeredCount = events.filter((e) => e.registeredUsers.some(a => a.userId === userId)).length;
+  const waitlistedCount = events.filter((e) => e.waitlist.some(a => a.userId === userId)).length;
 
   // Simple calendar data — group events by date
   const calendarDates = useMemo(() => {
