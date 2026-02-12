@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from "react";
 import { toast } from "sonner";
 import { mockEvents as seedEvents, type Event as BaseEvent } from "@/lib/mock-data";
 
@@ -7,6 +7,7 @@ import { mockEvents as seedEvents, type Event as BaseEvent } from "@/lib/mock-da
 export interface EventData extends Omit<BaseEvent, "attendees" | "isRsvped"> {
     registeredUsers: string[]; // user IDs
     waitlist: string[];        // user IDs
+    rsvpConfirmed: string[];   // user IDs who confirmed RSVP
     createdBy: string;         // organizer user ID
 }
 
@@ -22,16 +23,20 @@ interface EventContextValue {
     events: EventData[];
     notifications: Notification[];
     getEvent: (id: string) => EventData | undefined;
-    createEvent: (event: Omit<EventData, "id" | "registeredUsers" | "waitlist">) => void;
-    updateEvent: (id: string, updates: Partial<Omit<EventData, "id" | "registeredUsers" | "waitlist" | "createdBy">>) => void;
+    createEvent: (event: Omit<EventData, "id" | "registeredUsers" | "waitlist" | "rsvpConfirmed">) => void;
+    updateEvent: (id: string, updates: Partial<Omit<EventData, "id" | "registeredUsers" | "waitlist" | "rsvpConfirmed" | "createdBy">>) => void;
     deleteEvent: (id: string) => void;
     registerForEvent: (eventId: string, userId: string, userName: string) => void;
     unregisterFromEvent: (eventId: string, userId: string) => void;
     getRegistrationStatus: (eventId: string, userId: string) => RegistrationStatus;
     getWaitlistPosition: (eventId: string, userId: string) => number;
+    confirmRsvp: (eventId: string, userId: string) => void;
+    cancelRsvp: (eventId: string, userId: string) => void;
+    getRsvpStatus: (eventId: string, userId: string) => boolean;
     markNotificationRead: (id: string) => void;
     clearNotifications: () => void;
     unreadCount: number;
+    checkReminders: (userId: string) => void;
 }
 
 export type RegistrationStatus = "available" | "registered" | "waitlisted" | "closed";
@@ -40,6 +45,7 @@ export type RegistrationStatus = "available" | "registered" | "waitlisted" | "cl
 
 const EVENTS_KEY = "campushub_events";
 const NOTIFS_KEY = "campushub_notifications";
+const REMINDERS_KEY = "campushub_sent_reminders";
 
 function generateId() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -61,6 +67,7 @@ function seedToEventData(events: BaseEvent[]): EventData[] {
         tags: e.tags,
         registeredUsers: [],
         waitlist: [],
+        rsvpConfirmed: [],
         createdBy: "seed-organizer",
     }));
 }
@@ -98,8 +105,8 @@ export function EventProvider({ children }: { children: ReactNode }) {
 
     // ── CRUD ────────────────────────────────────────────────────
 
-    const createEvent = (event: Omit<EventData, "id" | "registeredUsers" | "waitlist">) => {
-        const newEvent: EventData = { ...event, id: generateId(), registeredUsers: [], waitlist: [] };
+    const createEvent = (event: Omit<EventData, "id" | "registeredUsers" | "waitlist" | "rsvpConfirmed">) => {
+        const newEvent: EventData = { ...event, id: generateId(), registeredUsers: [], waitlist: [], rsvpConfirmed: [] };
         setEvents((prev) => [newEvent, ...prev]);
         toast.success(`Event "${newEvent.title}" created!`);
     };
@@ -179,6 +186,64 @@ export function EventProvider({ children }: { children: ReactNode }) {
         return idx === -1 ? -1 : idx + 1;
     };
 
+    // ── RSVP ──────────────────────────────────────────────────────
+
+    const confirmRsvp = (eventId: string, userId: string) => {
+        setEvents((prev) =>
+            prev.map((e) => {
+                if (e.id !== eventId) return e;
+                if (!e.registeredUsers.includes(userId)) return e;
+                if (e.rsvpConfirmed?.includes(userId)) return e;
+                toast.success(`RSVP confirmed for "${e.title}" ✓`);
+                addNotification(`You confirmed your RSVP for "${e.title}"`, e.id);
+                return { ...e, rsvpConfirmed: [...(e.rsvpConfirmed || []), userId] };
+            })
+        );
+    };
+
+    const cancelRsvp = (eventId: string, userId: string) => {
+        setEvents((prev) =>
+            prev.map((e) => {
+                if (e.id !== eventId) return e;
+                toast.info("RSVP cancelled");
+                return { ...e, rsvpConfirmed: (e.rsvpConfirmed || []).filter((id) => id !== userId) };
+            })
+        );
+    };
+
+    const getRsvpStatus = (eventId: string, userId: string): boolean => {
+        const event = events.find((e) => e.id === eventId);
+        if (!event) return false;
+        return (event.rsvpConfirmed || []).includes(userId);
+    };
+
+    // ── Reminders ────────────────────────────────────────────────
+
+    const checkReminders = (userId: string) => {
+        if (!userId) return;
+        const sentReminders: string[] = getStored<string[]>(REMINDERS_KEY, []);
+        const now = new Date();
+        const oneDayMs = 24 * 60 * 60 * 1000;
+
+        events.forEach((e) => {
+            if (!e.registeredUsers.includes(userId)) return;
+            const eventDate = new Date(e.date);
+            const timeDiff = eventDate.getTime() - now.getTime();
+            const reminderKey = `${userId}_${e.id}`;
+
+            // Send reminder if event is within 24 hours and reminder not yet sent
+            if (timeDiff > 0 && timeDiff <= oneDayMs && !sentReminders.includes(reminderKey)) {
+                addNotification(
+                    `⏰ Reminder: "${e.title}" is tomorrow at ${e.time}! Don't forget to attend.`,
+                    e.id
+                );
+                sentReminders.push(reminderKey);
+            }
+        });
+
+        localStorage.setItem(REMINDERS_KEY, JSON.stringify(sentReminders));
+    };
+
     const markNotificationRead = (id: string) => {
         setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n));
     };
@@ -194,7 +259,9 @@ export function EventProvider({ children }: { children: ReactNode }) {
                 createEvent, updateEvent, deleteEvent,
                 registerForEvent, unregisterFromEvent,
                 getRegistrationStatus, getWaitlistPosition,
+                confirmRsvp, cancelRsvp, getRsvpStatus,
                 markNotificationRead, clearNotifications, unreadCount,
+                checkReminders,
             }}
         >
             {children}

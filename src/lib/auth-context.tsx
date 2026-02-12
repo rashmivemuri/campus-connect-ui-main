@@ -83,6 +83,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return false;
         }
 
+        // Email format validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email.trim())) {
+            toast.error("Please enter a valid email address");
+            return false;
+        }
+
+        // Password strength validation
+        if (password.length < 6) {
+            toast.error("Password must be at least 6 characters long");
+            return false;
+        }
+        if (!/[A-Z]/.test(password)) {
+            toast.error("Password must contain at least one uppercase letter");
+            return false;
+        }
+        if (!/[0-9]/.test(password)) {
+            toast.error("Password must contain at least one number");
+            return false;
+        }
+
         const users = getStoredUsers();
         if (users.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
             toast.error("An account with this email already exists");

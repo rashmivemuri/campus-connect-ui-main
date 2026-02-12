@@ -135,6 +135,7 @@ const Login = () => {
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input id="signup-password" type="password" placeholder="••••••••" className="pl-9" value={signupPassword} onChange={(e) => setSignupPassword(e.target.value)} />
                     </div>
+                    <p className="text-xs text-muted-foreground">Min 6 characters, 1 uppercase letter, 1 number</p>
                   </div>
                   <div className="space-y-2">
                     <Label>I am a</Label>
