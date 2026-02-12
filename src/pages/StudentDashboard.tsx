@@ -62,7 +62,7 @@ const StudentDashboard = () => {
     // My Events tab: show only registered or waitlisted
     if (isMyEvents) {
       result = result.filter(
-        (e) => e.registeredUsers.some(a => a.userId === userId) || e.waitlist.some(a => a.userId === userId)
+        (e) => e.registeredUsers.some(a => a.userId === userId) || e.waitlist.some(a => a.userId === userId) || (e.bookmarks || []).includes(userId)
       );
     }
 

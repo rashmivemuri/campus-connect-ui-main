@@ -47,7 +47,7 @@ function saveUsers(users: AuthUser[]) {
 
 function getStoredSession(): SessionUser | null {
     try {
-        return JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
+        return JSON.parse(sessionStorage.getItem(SESSION_KEY) || "null");
     } catch {
         return null;
     }
@@ -55,9 +55,9 @@ function getStoredSession(): SessionUser | null {
 
 function saveSession(user: SessionUser | null) {
     if (user) {
-        localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(user));
     } else {
-        localStorage.removeItem(SESSION_KEY);
+        sessionStorage.removeItem(SESSION_KEY);
     }
 }
 

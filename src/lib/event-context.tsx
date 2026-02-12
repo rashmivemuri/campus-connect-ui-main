@@ -16,6 +16,7 @@ export interface EventData extends Omit<BaseEvent, "attendees" | "isRsvped"> {
     waitlist: Attendee[];
     rsvpConfirmed: string[];   // user IDs who confirmed RSVP
     checkedIn: string[];       // user IDs who checked in via QR
+    bookmarks: string[];       // user IDs who bookmarked the event
     createdBy: string;         // organizer user ID
 }
 
@@ -46,6 +47,8 @@ interface EventContextValue {
     clearNotifications: () => void;
     unreadCount: number;
     checkReminders: (userId: string) => void;
+    toggleBookmark: (eventId: string, userId: string) => void;
+    isBookmarked: (eventId: string, userId: string) => boolean;
 }
 
 export type RegistrationStatus = "available" | "registered" | "waitlisted" | "closed";
@@ -78,6 +81,7 @@ function seedToEventData(events: BaseEvent[]): EventData[] {
         waitlist: [],
         rsvpConfirmed: [],
         checkedIn: [],
+        bookmarks: [],
         createdBy: "seed-organizer",
     }));
 }
@@ -124,13 +128,13 @@ export function EventProvider({ children }: { children: ReactNode }) {
 
     // ── CRUD ────────────────────────────────────────────────────
 
-    const createEvent = (event: Omit<EventData, "id" | "registeredUsers" | "waitlist" | "rsvpConfirmed" | "checkedIn">) => {
-        const newEvent: EventData = { ...event, id: generateId(), registeredUsers: [], waitlist: [], rsvpConfirmed: [], checkedIn: [] };
+    const createEvent = (event: Omit<EventData, "id" | "registeredUsers" | "waitlist" | "rsvpConfirmed" | "checkedIn" | "bookmarks">) => {
+        const newEvent: EventData = { ...event, id: generateId(), registeredUsers: [], waitlist: [], rsvpConfirmed: [], checkedIn: [], bookmarks: [] };
         setEvents((prev) => [newEvent, ...prev]);
         toast.success(`Event "${newEvent.title}" created!`);
     };
 
-    const updateEvent = (id: string, updates: Partial<Omit<EventData, "id" | "registeredUsers" | "waitlist" | "createdBy">>) => {
+    const updateEvent = (id: string, updates: Partial<Omit<EventData, "id" | "registeredUsers" | "waitlist" | "rsvpConfirmed" | "checkedIn" | "bookmarks" | "createdBy">>) => {
         setEvents((prev) => prev.map((e) => (e.id === id ? { ...e, ...updates } : e)));
         toast.success("Event updated!");
     };
@@ -256,6 +260,31 @@ export function EventProvider({ children }: { children: ReactNode }) {
         return "success";
     };
 
+    // ── Bookmarks ────────────────────────────────────────────────
+
+    const toggleBookmark = (eventId: string, userId: string) => {
+        setEvents((prev) =>
+            prev.map((e) => {
+                if (e.id !== eventId) return e;
+                const bookmarks = e.bookmarks || [];
+                const isBookmarked = bookmarks.includes(userId);
+
+                if (isBookmarked) {
+                    toast.success("Bookmark removed");
+                    return { ...e, bookmarks: bookmarks.filter(id => id !== userId) };
+                } else {
+                    toast.success("Event bookmarked");
+                    return { ...e, bookmarks: [...bookmarks, userId] };
+                }
+            })
+        );
+    };
+
+    const isBookmarked = (eventId: string, userId: string): boolean => {
+        const event = events.find((e) => e.id === eventId);
+        return (event?.bookmarks || []).includes(userId);
+    };
+
     // ── Reminders ────────────────────────────────────────────────
 
     const checkReminders = (userId: string) => {
@@ -301,6 +330,8 @@ export function EventProvider({ children }: { children: ReactNode }) {
                 checkInUser,
                 markNotificationRead, clearNotifications, unreadCount,
                 checkReminders,
+                toggleBookmark,
+                isBookmarked,
             }}
         >
             {children}
