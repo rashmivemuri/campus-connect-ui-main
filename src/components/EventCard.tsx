@@ -22,10 +22,11 @@ const categoryColors: Record<string, string> = {
 
 export function EventCard({ event }: EventCardProps) {
   const { user } = useAuth();
-  const { registerForEvent, unregisterFromEvent, getRegistrationStatus, getWaitlistPosition } = useEvents();
+  const { registerForEvent, unregisterFromEvent, getRegistrationStatus, getWaitlistPosition, confirmRsvp, cancelRsvp, getRsvpStatus } = useEvents();
 
   const userId = user?.id || "";
   const status: RegistrationStatus = getRegistrationStatus(event.id, userId);
+  const isRsvpConfirmed = getRsvpStatus(event.id, userId);
   const waitlistPos = getWaitlistPosition(event.id, userId);
   const spotsLeft = event.maxAttendees - event.registeredUsers.length;
   const fillPercent = (event.registeredUsers.length / event.maxAttendees) * 100;
@@ -34,7 +35,17 @@ export function EventCard({ event }: EventCardProps) {
     e.preventDefault();
     e.stopPropagation();
     if (!user) return;
-    if (status === "registered" || status === "waitlisted") {
+
+    if (status === "registered") {
+      if (isRsvpConfirmed) {
+        // Optional: Allow canceling RSVP without unregistering? 
+        // For now, let's make the green checkmark static or allow unregistering.
+        // Let's allow unregistering which also cancels RSVP.
+        unregisterFromEvent(event.id, userId);
+      } else {
+        confirmRsvp(event.id, userId);
+      }
+    } else if (status === "waitlisted") {
       unregisterFromEvent(event.id, userId);
     } else {
       registerForEvent(event.id, userId, user.name);
@@ -43,7 +54,9 @@ export function EventCard({ event }: EventCardProps) {
 
   const buttonConfig = {
     available: { label: "Register", variant: "default" as const, className: "gradient-accent text-accent-foreground border-0 hover:opacity-90" },
-    registered: { label: "Registered ✓", variant: "outline" as const, className: "border-success text-success" },
+    registered: isRsvpConfirmed
+      ? { label: "RSVP Confirmed ✓", variant: "outline" as const, className: "border-success text-success hover:bg-success/10" }
+      : { label: "Confirm RSVP", variant: "default" as const, className: "bg-primary text-primary-foreground hover:bg-primary/90" },
     waitlisted: { label: `Waitlist #${waitlistPos}`, variant: "outline" as const, className: "border-warning text-warning" },
     closed: { label: "Join Waitlist", variant: "secondary" as const, className: "" },
   };

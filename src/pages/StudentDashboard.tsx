@@ -1,16 +1,16 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { EventCard } from "@/components/EventCard";
 import { StatsCard } from "@/components/StatsCard";
 import { useAuth } from "@/lib/auth-context";
-import { useEvents } from "@/lib/event-context";
+import { useEvents, type EventData } from "@/lib/event-context";
 import { categories, departments } from "@/lib/mock-data";
 import { CalendarDays, BookOpen, Star, TrendingUp, Search, Filter } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 const StudentDashboard = () => {
   const { user } = useAuth();
@@ -20,11 +20,41 @@ const StudentDashboard = () => {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedDept, setSelectedDept] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
+  const [suggestions, setSuggestions] = useState<EventData[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
   const [dateFilter, setDateFilter] = useState("");
 
   const tab = searchParams.get("tab");
   const isMyEvents = tab === "my-events";
   const userId = user?.id || "";
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleSearchChange = (query: string) => {
+    setSearchQuery(query);
+    if (query.trim().length > 1) {
+      const q = query.toLowerCase();
+      const matches = events.filter(e =>
+        e.title.toLowerCase().includes(q) ||
+        e.category.toLowerCase().includes(q) ||
+        e.tags?.some(tag => tag.toLowerCase().includes(q))
+      ).slice(0, 5);
+      setSuggestions(matches);
+      setShowSuggestions(true);
+    } else {
+      setSuggestions([]);
+      setShowSuggestions(false);
+    }
+  };
 
   const filteredEvents = useMemo(() => {
     let result = events;
@@ -105,14 +135,43 @@ const StudentDashboard = () => {
         {/* Search and Filters */}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
           {/* Search bar */}
-          <div className="relative">
+          <div className="relative" ref={searchRef}>
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search events by name, location, tag..."
               className="pl-9"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              onFocus={() => searchQuery.length > 1 && setShowSuggestions(true)}
             />
+            {/* Search Suggestions */}
+            <AnimatePresence>
+              {showSuggestions && suggestions.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }}
+                  className="absolute left-0 top-full mt-2 w-full bg-card border border-border rounded-lg shadow-lg z-50 overflow-hidden"
+                >
+                  <div className="py-1">
+                    {suggestions.map((event) => (
+                      <button
+                        key={event.id}
+                        className="flex flex-col w-full text-left px-4 py-2 hover:bg-muted/50 transition-colors"
+                        onClick={() => {
+                          setSearchQuery(event.title);
+                          setShowSuggestions(false);
+                        }}
+                      >
+                        <span className="text-sm font-medium">{event.title}</span>
+                        <div className="flex justify-between w-full text-xs text-muted-foreground">
+                          <span>{event.category}</span>
+                          <span>{new Date(event.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Filter row */}
@@ -153,8 +212,8 @@ const StudentDashboard = () => {
                 key={cat}
                 variant={selectedCategory === cat ? "default" : "outline"}
                 className={`cursor-pointer transition-all ${selectedCategory === cat
-                    ? "gradient-accent text-accent-foreground border-0"
-                    : "hover:border-accent/50"
+                  ? "gradient-accent text-accent-foreground border-0"
+                  : "hover:border-accent/50"
                   }`}
                 onClick={() => setSelectedCategory(cat)}
               >
@@ -176,8 +235,8 @@ const StudentDashboard = () => {
                   key={date}
                   onClick={() => setDateFilter(isSelected ? "" : date)}
                   className={`flex-shrink-0 flex flex-col items-center px-3 py-2 rounded-lg border text-xs transition-all ${isSelected
-                      ? "gradient-accent text-accent-foreground border-transparent"
-                      : "border-border hover:border-accent/50"
+                    ? "gradient-accent text-accent-foreground border-transparent"
+                    : "border-border hover:border-accent/50"
                     }`}
                 >
                   <span className="font-semibold">{d.toLocaleDateString("en-US", { month: "short" })}</span>

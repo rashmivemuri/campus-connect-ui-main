@@ -71,13 +71,20 @@ function AttendeesModal({ event, onClose }: { event: EventData; onClose: () => v
               <p className="text-sm text-muted-foreground">No registrations yet.</p>
             ) : (
               <ul className="space-y-1">
-                {event.registeredUsers.map((uid, i) => (
-                  <li key={uid} className="flex items-center gap-2 text-sm p-2 rounded bg-muted/50">
-                    <span className="w-6 h-6 rounded-full gradient-accent text-accent-foreground flex items-center justify-center text-xs font-bold">{i + 1}</span>
-                    <span>User {uid.slice(0, 8)}</span>
-                    <Badge variant="outline" className="ml-auto text-xs text-success border-success">Confirmed</Badge>
-                  </li>
-                ))}
+                {event.registeredUsers.map((uid, i) => {
+                  const isRsvped = event.rsvpConfirmed?.includes(uid);
+                  return (
+                    <li key={uid} className="flex items-center gap-2 text-sm p-2 rounded bg-muted/50">
+                      <span className="w-6 h-6 rounded-full gradient-accent text-accent-foreground flex items-center justify-center text-xs font-bold">{i + 1}</span>
+                      <span>User {uid.slice(0, 8)}</span>
+                      {isRsvped ? (
+                        <Badge variant="outline" className="ml-auto text-xs text-success border-success bg-success/10">RSVP Confirmed</Badge>
+                      ) : (
+                        <Badge variant="outline" className="ml-auto text-xs text-muted-foreground border-border">Registered</Badge>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
@@ -297,6 +304,7 @@ const OrganizerDashboard = () => {
                   <th className="text-left p-3 font-medium text-muted-foreground hidden md:table-cell">Date</th>
                   <th className="text-left p-3 font-medium text-muted-foreground hidden lg:table-cell">Category</th>
                   <th className="text-center p-3 font-medium text-muted-foreground">Registered</th>
+                  <th className="text-center p-3 font-medium text-muted-foreground hidden lg:table-cell">Confirmed</th>
                   <th className="text-center p-3 font-medium text-muted-foreground hidden sm:table-cell">Waitlist</th>
                   <th className="text-right p-3 font-medium text-muted-foreground">Actions</th>
                 </tr>
@@ -319,6 +327,11 @@ const OrganizerDashboard = () => {
                     <td className="p-3 text-center">
                       <span className={event.registeredUsers.length >= event.maxAttendees ? "text-destructive font-medium" : ""}>
                         {event.registeredUsers.length}/{event.maxAttendees}
+                      </span>
+                    </td>
+                    <td className="p-3 text-center hidden lg:table-cell">
+                      <span className="text-success font-medium">
+                        {event.rsvpConfirmed?.length || 0}
                       </span>
                     </td>
                     <td className="p-3 text-center hidden sm:table-cell">
