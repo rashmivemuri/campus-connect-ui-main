@@ -2,11 +2,13 @@ import { Link } from "react-router-dom";
 import { GraduationCap, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EventCard } from "@/components/EventCard";
-import { mockEvents } from "@/lib/mock-data";
+import { useEvents } from "@/lib/event-context";
 import { motion } from "framer-motion";
 import heroCampus from "@/assets/hero-campus.jpg";
 
 const Index = () => {
+  const { events } = useEvents();
+
   return (
     <div className="min-h-screen bg-background">
       {/* Nav */}
@@ -74,7 +76,7 @@ const Index = () => {
           </Link>
         </div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {mockEvents.slice(0, 3).map((event) => (
+          {events.slice(0, 3).map((event) => (
             <EventCard key={event.id} event={event} />
           ))}
         </div>
